@@ -1,0 +1,2 @@
+D:\Backend\bot-weather-telegram\bin\Release\net10.0\linux-x64\publish\bot-weather-telegram.pdb
+D:\Backend\bot-weather-telegram\bin\Release\net10.0\linux-x64\publish\bot-weather-telegram
