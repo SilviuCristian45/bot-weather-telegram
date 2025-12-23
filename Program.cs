@@ -5,6 +5,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types; // Necesar pentru InputFile
 using Telegram.Bot.Types.Enums;
 using Newtonsoft.Json.Linq;
+using System.Text.Json;
 
 namespace WeatherBot
 {
@@ -38,34 +39,38 @@ namespace WeatherBot
                 // 2. Construim mesajul
                 string mesajBucuresti = $"🌍 **Vremea in Bucuresti:**\n" +
                                $"🌡️ Temperatura: {vremeBucuresti.Temperatura}°C\n" +
-                               $"☁️ Descriere: {vremeBucuresti.Descriere}\n\n" + 
-                               $"Imagine: []({vremeBucuresti.image})";
+                               $"☁️ Descriere: {vremeBucuresti.Descriere}\n";
 
                 string mesajTurda =
                                $"🌍 **Vremea in Turda:**\n" +
                                $"🌡️ Temperatura: {vremeTurda.Temperatura}°C\n" +
-                               $"☁️ Descriere: {vremeTurda.Descriere}\n" + 
-                               $"Imagine: []({vremeTurda.image}) ";
+                               $"☁️ Descriere: {vremeTurda.Descriere}\n";
 
                 Console.WriteLine(mesajBucuresti);
                 Console.WriteLine(mesajTurda);
 
                 var botClient = new TelegramBotClient(TelegramBotToken);
 
-                await botClient.SendPhoto(
+                await botClient.SendMessage(
                     chatId: TelegramChatId,
-                    photo: InputFile.FromUri(vremeBucuresti.image), // Aici punem URL-ul imaginii
-                    caption: mesajBucuresti,
-                    parseMode: ParseMode.Markdown
+                    text: "--------------------------------------------"
+                );
+               
+                await botClient.SendMessage(
+                    chatId: TelegramChatId,
+                    text: String.Format("{0:f}",   DateTime.Now)
                 );
 
-                await botClient.SendPhoto(
+                await botClient.SendMessage(
+                    chatId: TelegramChatId,
+                    text: mesajBucuresti
+                );
+
+                await botClient.SendMessage(
                     chatId: TelegramChatId,
                     parseMode: ParseMode.Markdown,
-                    photo: InputFile.FromUri(vremeTurda.image), // Aici punem URL-ul imaginii
-                    caption: mesajTurda
+                    text: mesajTurda
                 );
-
                 
                 Console.WriteLine("Mesaj trimis cu succes!");
             }
@@ -88,11 +93,15 @@ namespace WeatherBot
                 }
 
                 string continut = File.ReadAllText(caleFisier);
-                var json = JObject.Parse(continut);
-
-                WeatherApiKey = json["WeatherApiKey"].ToString();
-                TelegramBotToken = json["TelegramBotToken"].ToString();
-                TelegramChatId = (long)json["TelegramChatId"];
+                var json = JsonSerializer.Deserialize<EnvVariables>(continut);
+                
+                if (json == null) {
+                    Console.WriteLine($"EROARE la PARSARE: Fisierul nu e in formatul corect");
+                    return false;
+                }
+                WeatherApiKey = json.WeatherApiKey;
+                TelegramBotToken = json.TelegramBotToken;
+                TelegramChatId = (long)json.TelegramChatId;
 
                 return true;
             }
@@ -104,26 +113,41 @@ namespace WeatherBot
         }
         private static async Task<(string Descriere, string Temperatura, string image)> GetWeatherData(string oras)
         {
-            using (var client = new HttpClient())
-            {
-                string url = $"http://api.weatherapi.com/v1/current.json?key={WeatherApiKey}&q={oras}&lang=ro";
+            bool weatherComputedSuccess = false;
+            int step = 1;
 
-                var response = await client.GetStringAsync(url);
+            while (weatherComputedSuccess == false && step <= 5) {
 
-                Console.WriteLine(response);
-                var json = JObject.Parse(response);
-
-                // Extragem datele specifice structurii WeatherAPI
-                string descriere = json["current"]["condition"]["text"].ToString();
-                string temperatura = json["current"]["temp_c"].ToString();
-                string image = json["current"]["condition"]["icon"].ToString();
-
-                if (image.StartsWith("//"))
+                Console.WriteLine($"Weather api call try #{step}");
+                 using (var client = new HttpClient())
                 {
-                    image = "https:" + image;
+                    string url = $"http://api.weatherapi.com/v1/current.json?key={WeatherApiKey}&q={oras}&lang=ro";
+
+                    var response = await client.GetAsync(url);
+
+                    if (response.IsSuccessStatusCode) {
+                        Console.WriteLine(response);
+                        var json = await response.Content.ReadAsStringAsync();
+                        WeatherResponse weatherForecast = JsonSerializer.Deserialize<WeatherResponse>(json)!;
+                       
+                        string descriere =  weatherForecast.Current.Condition.Text;
+                        string temperatura = weatherForecast.Current.TempC.ToString();
+                        string image = weatherForecast.Current.Condition.Icon;
+
+                        if (image.StartsWith("//"))
+                        {
+                            image = "https:" + image;
+                        }
+                        weatherComputedSuccess = true;
+                        return (descriere, temperatura, image);
+                    }   
                 }
-                return (descriere, temperatura, image);
+                step++;
+                Console.WriteLine("Wait 3 seconds ...");
+                await Task.Delay(3000);;
             }
+            throw new Exception("weather api calls failed for 5 times");
         }
     }
+    
 }
