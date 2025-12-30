@@ -35,6 +35,7 @@ namespace WeatherBot
                 // 1. Obținem datele
                 var vremeBucuresti = await GetWeatherData("Bucharest");
                 var vremeTurda = await GetWeatherData("Turda");
+                var cryptoService = new CryptoService();
 
                 // 2. Construim mesajul
                 string mesajBucuresti = $"🌍 **Vremea in Bucuresti:**\n" +
@@ -45,6 +46,8 @@ namespace WeatherBot
                                $"🌍 **Vremea in Turda:**\n" +
                                $"🌡️ Temperatura: {vremeTurda.Temperatura}°C\n" +
                                $"☁️ Descriere: {vremeTurda.Descriere}\n";
+
+                string mesajCrypto = await cryptoService.GetTopCryptoMessageAsync();
 
                 Console.WriteLine(mesajBucuresti);
                 Console.WriteLine(mesajTurda);
@@ -70,6 +73,12 @@ namespace WeatherBot
                     chatId: TelegramChatId,
                     parseMode: ParseMode.Markdown,
                     text: mesajTurda
+                );
+
+                await botClient.SendMessage(
+                    chatId: TelegramChatId,
+                    parseMode: ParseMode.Markdown,
+                    text: mesajCrypto
                 );
                 
                 Console.WriteLine("Mesaj trimis cu succes!");
