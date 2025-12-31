@@ -12,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Telegram.Bot" Version="22.7.6" />
+    <PackageReference Include="YahooFinanceApi" Version="2.3.3" />
   </ItemGroup>
 
 <ItemGroup>

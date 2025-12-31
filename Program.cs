@@ -25,6 +25,10 @@ namespace WeatherBot
         static async Task Main(string[] args)
         {
             Console.WriteLine("Preluare date meteo (WeatherAPI)...");
+            string mesajBucuresti = "";
+            string mesajTurda = "";
+            string mesajCrypto = "";
+            string mesajBursa = "";
 
             if (!LoadConfiguration())
             {
@@ -33,59 +37,83 @@ namespace WeatherBot
             try
             {
                 // 1. Obținem datele
-                var vremeBucuresti = await GetWeatherData("Bucharest");
-                var vremeTurda = await GetWeatherData("Turda");
+                var vremeBucurestiTask = GetWeatherData("Bucharest");
+                var vremeTurdaTaskTask = GetWeatherData("Turda");
                 var cryptoService = new CryptoService();
+                var stockService = new StockService();
 
-                // 2. Construim mesajul
-                string mesajBucuresti = $"🌍 **Vremea in Bucuresti:**\n" +
+
+                var mesajCryptoTask =  cryptoService.GetTopCryptoMessageAsync();
+                var mesajBursaTask =  stockService.GetStockMarketDataAsync();
+
+                await Task.WhenAll(mesajCryptoTask, mesajBursaTask, vremeBucurestiTask, vremeTurdaTaskTask); // Asteptam ambele
+
+                mesajCrypto = mesajCryptoTask.Result;
+                mesajBursa = mesajBursaTask.Result;
+                var vremeBucuresti = vremeBucurestiTask.Result;
+                var vremeTurda = vremeTurdaTaskTask.Result;
+
+                mesajBucuresti = $"🌍 **Vremea in Bucuresti:**\n" +
                                $"🌡️ Temperatura: {vremeBucuresti.Temperatura}°C\n" +
                                $"☁️ Descriere: {vremeBucuresti.Descriere}\n";
 
-                string mesajTurda =
+                mesajTurda =
                                $"🌍 **Vremea in Turda:**\n" +
                                $"🌡️ Temperatura: {vremeTurda.Temperatura}°C\n" +
                                $"☁️ Descriere: {vremeTurda.Descriere}\n";
 
-                string mesajCrypto = await cryptoService.GetTopCryptoMessageAsync();
-
                 Console.WriteLine(mesajBucuresti);
                 Console.WriteLine(mesajTurda);
+                Console.WriteLine(mesajCrypto);
+                Console.WriteLine(mesajBursa);
 
                 var botClient = new TelegramBotClient(TelegramBotToken);
 
-                await botClient.SendMessage(
-                    chatId: TelegramChatId,
-                    text: "--------------------------------------------"
-                );
-               
-                await botClient.SendMessage(
-                    chatId: TelegramChatId,
-                    text: String.Format("{0:f}",   DateTime.Now)
-                );
+                List<string> messages = new List<string> {mesajBucuresti, mesajTurda, mesajCrypto, mesajBursa};
 
                 await botClient.SendMessage(
                     chatId: TelegramChatId,
-                    text: mesajBucuresti
+                    text: "--------------------------------------------\n" + String.Format("{0:f}",   DateTime.Now) + "\n"
                 );
 
-                await botClient.SendMessage(
-                    chatId: TelegramChatId,
-                    parseMode: ParseMode.Markdown,
-                    text: mesajTurda
-                );
+                foreach (var message in messages)
+                {
+                    await botClient.SendMessage(
+                        chatId: TelegramChatId,
+                        parseMode: ParseMode.Html,
+                        text: message
+                    );
+                }
 
-                await botClient.SendMessage(
-                    chatId: TelegramChatId,
-                    parseMode: ParseMode.Markdown,
-                    text: mesajCrypto
-                );
-                
                 Console.WriteLine("Mesaj trimis cu succes!");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"A aparut o eroare: {ex.Message}");
+                // LOGICA DE BACKUP: Scriem într-un fișier text dacă Telegram nu merge
+                try 
+                {
+                    string logFile = "backup_rapoarte.txt";
+                    string dataCurenta = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+                    
+                    // Construim un text simplu de salvat
+                    string continutBackup = $"\n--- RAPORT {dataCurenta} (Telegram Failed) ---\n" +
+                                            "Din cauza unei erori, mesajul nu a plecat. Iata datele:\n" +
+                                            "--- CRIPTO ---\n" + 
+                                            mesajBucuresti + "\n" +
+                                            mesajTurda + "\n" +
+                                            mesajBursa + "\n" +
+                                            mesajCrypto + "\n" + // Trebuie sa declari variabila mesajCrypto in afara try-ului principal ca sa o vezi aici
+                                            "------------------------------------------\n";
+
+                    // AppendAllText creaza fisierul daca nu exista sau adauga la final
+                    File.AppendAllText(logFile, continutBackup);
+                    Console.WriteLine("Am salvat datele local in backup_rapoarte.txt");
+                }
+                catch (Exception fileEx)
+                {
+                    Console.WriteLine("Nici salvarea in fisier nu a mers: " + fileEx.Message);
+                }
             }
         }
 
